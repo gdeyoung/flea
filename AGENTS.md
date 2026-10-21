@@ -9670,3 +9670,13 @@ Before the Markdown Source merge, the Compare request, dispatch, answer route, o
 `ui/Pane.qml` is 1232 lines against its 1233 ceiling: moving its direct Compare import to the existing Ops import removed one line after the ceiling was recorded. `ui/js/Focus.js` was 490 against 491 before the Markdown Source merge: the same import move took it from 489 to 488, and the merged paging handlers then added two lines and raised the ceiling by two, from 489 to 491, a raise counted on a tree that still held the import line, so one line was spare in each ceiling at that step.
 
 Before the Markdown Source merge, the code wrap keys joined beside the image zoom keys moved one ceiling, re-derived with `wc -l`: `tests/js/previewkeys.js` crossed the hard cap at 303 with `runImageZoom` and `runWrapKeys` side by side, each pinning one Quick Look key family; recorded because the join added no lines of its own.
+
+The network browser's land raises three recorded ceilings, each re-derived with `wc -l`:
+`ui/NetworkMounts.qml` 913 to 1137 for the hosts leg, the NFS stage and its supersede guard,
+the guest-empty sign-in handoff and the deadline's warm retry; `ui/WindowBody.qml` 817 to 860
+for the `browseHosts()` entry, its scanning open and the hosts-listed arms; `ui/Ipc.qml` 993 to
+1044 for the browser's own probes. `ui/ShareBrowser.qml` (193 lines) sits under the soft
+budget and records no debt. A second host's browse while a `showmount` ask is still in flight
+supersedes it (`_nfsSuperseded`, set by the replacing browse, read and cleared only by the
+dying exit — the one-way rule of `_nfsTimedOut`), so a stale portmapper answer can neither
+stop the live ask's timer nor append the wrong host's exports to it.

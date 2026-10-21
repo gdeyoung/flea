@@ -731,6 +731,9 @@ Item {
     property var _nfsNames: []
     property var _nfsOrigin: null
     property bool _nfsTimedOut: false
+    // Set by the browse that supersedes a showmount ask still in flight; only the dying exit
+    // reads and clears it, so the stale answer can never speak for the ask that replaced it.
+    property bool _nfsSuperseded: false
 
     function hostOf(uri) {
         var rest = String(uri || "").replace(/^smb:\/\//, "")
@@ -745,6 +748,15 @@ Item {
     }
 
     function listNfsExports(host, names, origin) {
+        // A second host's browse can arrive while this ask is still outstanding; the one
+        // process instance is reused, so the ask it supersedes is killed and marked, and its
+        // own onExited neither stops this ask's timer nor answers with the wrong host's rows.
+        // Only the dying exit clears the mark, the same one-way rule as _nfsTimedOut, so a
+        // queued exit can never race the ask that replaced it.
+        if (showmountProcess.running) {
+            root._nfsSuperseded = true
+            showmountProcess.running = false
+        }
         root._nfsHost = host
         root._nfsNames = names
         root._nfsOrigin = origin
@@ -1031,9 +1043,14 @@ Item {
         environment: root.gioEnvironment
         command: ["showmount", "-e"]
         onExited: function (exitCode) {
-            nfsTimeout.stop()
             var timedOut = root._nfsTimedOut
             root._nfsTimedOut = false
+            var superseded = root._nfsSuperseded
+            root._nfsSuperseded = false
+            // The superseding ask owns the timer and the answer now; this exit belongs to a
+            // browse the user already replaced, so it neither stops nor speaks.
+            if (superseded) return
+            nfsTimeout.stop()
             if (timedOut) return
             var names = root._nfsNames
             if (exitCode === 0) {

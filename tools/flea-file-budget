@@ -138,7 +138,7 @@ ui/ColumnPane.qml 461
 ui/ContextMenu.qml 740
 ui/ConvertDialog.qml 456
 ui/GridArea.qml 665
-ui/Ipc.qml 993
+ui/Ipc.qml 1044
 tests/gridprebuild.qml 457
 tests/code-column.qml 416
 tests/preview-pdf-flow.qml 439
@@ -156,7 +156,7 @@ ui/FigureService.qml 405
 ui/FlashView.qml 397
 ui/NetworkDialog.qml 435
 ui/NetworkForm.qml 426
-ui/NetworkMounts.qml 913
+ui/NetworkMounts.qml 1137
 ui/OpenWithDialog.qml 613
 ui/Pane.qml 1235
 ui/PaneMenuActions.qml 527
@@ -180,7 +180,7 @@ ui/Theme.qml 480
 ui/TrashView.qml 492
 ui/UnlockDialog.qml 450
 ui/ViewState.qml 565
-ui/WindowBody.qml 817
+ui/WindowBody.qml 860
 ui/js/Anchor.js 379
 ui/js/ColumnsCarry.js 103
 ui/js/Devices.js 440
