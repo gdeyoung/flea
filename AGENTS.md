@@ -8364,6 +8364,13 @@ overlay's scanning page first (`ShareBrowser.openScanning()`: the `Spinner` craw
 "looking", `ui/LoadingState.qml`'s terms) and the answer replaces it — hosts rows when avahi
 answers, the form when the LAN stays quiet (the crawl closes before that handoff, so the
 looking page never waits behind a dialog). An empty host list is a real answer, not a failure.
+A host row's activation owns the same wait: `onActivated` opens the crawl with its word
+"reading" (`openReading()`) before the bare-root open runs, and the shares — or the sign-in
+form — replace it. A crawl that ends in a refusal or an invitation falls back to the cached
+hosts page (`revertToHosts()`, called from `onMessage` and `onRetryRequested`), so no looking
+or reading page outlives its own ask. The sign-in invitation itself is quiet on the pane
+(`failMount`'s `quiet` flag): the form carries the reason, because a red line under a working
+server reads as a failure the server never had.
 
 The shares page carries its own way back: its first row is ".." (`backRow`), which reopens the
 hosts page `openHosts()` cached (`hostsPage`) — the level up the pane's own navigation cannot
@@ -9671,12 +9678,22 @@ Before the Markdown Source merge, the Compare request, dispatch, answer route, o
 
 Before the Markdown Source merge, the code wrap keys joined beside the image zoom keys moved one ceiling, re-derived with `wc -l`: `tests/js/previewkeys.js` crossed the hard cap at 303 with `runImageZoom` and `runWrapKeys` side by side, each pinning one Quick Look key family; recorded because the join added no lines of its own.
 
-The network browser's land raises three recorded ceilings, each re-derived with `wc -l`:
-`ui/NetworkMounts.qml` 913 to 1137 for the hosts leg, the NFS stage and its supersede guard,
-the guest-empty sign-in handoff and the deadline's warm retry; `ui/WindowBody.qml` 817 to 860
-for the `browseHosts()` entry, its scanning open and the hosts-listed arms; `ui/Ipc.qml` 993 to
-1044 for the browser's own probes. `ui/ShareBrowser.qml` (193 lines) sits under the soft
-budget and records no debt. A second host's browse while a `showmount` ask is still in flight
+The network feature's land raises ten recorded ceilings, each re-derived with `wc -l`:
+`ui/NetworkMounts.qml` 913 to 1141 for the hosts leg, the NFS stage and its supersede guard,
+the guest-empty sign-in handoff, the deadline's warm retry and the quiet invitation;
+`ui/WindowBody.qml` 817 to 877 for the `browseHosts()` entry, its crawl opens and reversion,
+and the hosts-listed arms; `ui/Ipc.qml` 993 to 1044 for the browser's own probes;
+`ui/Sidebar.qml` 716 to 724 and `ui/js/Menu.js` 513 to 520 for the pin's drop target and the
+save-place row; `ui/NetworkDialog.qml` 435 to 462 and `ui/js/Mounts.js` 320 to 321 for the
+browse button and the bare-root normalization; `src/backend/proto.rs` 473 to 476 and
+`src/backend/run.rs` 1116 to 1118 for the `kind` request; `tests/js/menu.js` 673 to 678 for the
+save-place checks. `ui/ShareBrowser.qml` (209 lines) sits under the soft budget and records no
+debt. The crawl has two words: "looking" while the LAN is asked, "reading" while a host's own
+shares are (`ui/LoadingState.qml`'s word for a slow source). The sign-in invitation is quiet on
+the pane — the form carries it, because a red line under a working server reads as a failure
+the server never had.
+
+A second host's browse while a `showmount` ask is still in flight
 supersedes it (`_nfsSuperseded`, set by the replacing browse, read and cleared only by the
 dying exit — the one-way rule of `_nfsTimedOut`), so a stale portmapper answer can neither
 stop the live ask's timer nor append the wrong host's exports to it.

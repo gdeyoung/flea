@@ -573,10 +573,14 @@ Item {
     // refused says the server itself turned the credential down. Only that invalidates it: a helper
     // that could not start and a host that never answered say nothing about the password, and the
     // reopened dialog has to be populated from it exactly as 0.1.6 populated it.
-    function failMount(reason, password, refused, missing) {
+    function failMount(reason, password, refused, missing, quiet) {
         root._pendingPassword = ""
         root.result = missing === true ? "missing-credential" : "failed"
-        root.message(reason, true)
+        // The sign-in invitation is not an error: when the form opens carrying the reason, the
+        // pane is not told at all, because a red line under a working server reads as a failure
+        // the server never had. Every failing arm still speaks; only the invitation is quiet.
+        if (quiet !== true)
+            root.message(reason, true)
         var attempted = password || root._requestPassword
         // Keeping a refused secret meant every later click on that location replayed it with no
         // prompt at all, which is how a domain account locks itself out.
@@ -1023,7 +1027,7 @@ Item {
                 if (exitCode === 0 && names.length === 0 && root.isBareRoot(root._pendingUri)
                         && String(root._pendingUri).indexOf("smb://") === 0) {
                     root.failMount("This server shows a guest nothing. Sign in to see its shares.",
-                                   root.passwordFor(root._pendingUri), false, true)
+                                   root.passwordFor(root._pendingUri), false, true, true)
                     return
                 }
                 root.failMount(Errors.WORDS.connectNoFolder, root.passwordFor(root._pendingUri))

@@ -689,11 +689,15 @@ Rectangle {
             shareBrowser.openHosts(names, origin)
         }
         function onRetryRequested(uri, label, password, reason, failedConnect, origin) {
+            shareBrowser.revertToHosts()
             networkDialog.openLocation(uri, label, password, reason, failedConnect, origin)
         }
         function onOpened(path, origin) { if (origin) RailKeys.openFrom(origin, path, origin.sidebar) }
         function onOpenFileRequested(path, origin) { if (origin) origin.openFile(path) }
         function onMessage(text, isError) {
+            // A failure toast while a crawl is up is the crawl's own ending: the page it was
+            // reading for is not coming, so the hosts page returns rather than spinning on.
+            shareBrowser.revertToHosts()
             var pane = view.currentPane
             if (pane.sidebar) RailKeys.messaged(pane.sidebar, isError)
             pane.message(text, isError)
@@ -750,6 +754,15 @@ Rectangle {
         // The instant page: avahi can take seconds to answer, so the ＋ opens the crawl first
         // and the answer replaces it — a blank pane in between reads as broken.
         function openScanning(origin) { owner = origin; shareLoader.active = true; shareLoader.item.openScanning() }
+        // A host row's open holds the same pane: its crawl ("reading") stands until the shares
+        // or the sign-in form replaces it.
+        function openReading(label, origin) { owner = origin; shareLoader.active = true; shareLoader.item.openReading(label) }
+        // A crawl that ends in a refusal or an invitation falls back to the page it came from,
+        // so no looking or reading page outlives its own ask.
+        function revertToHosts() {
+            if (shareLoader.item && shareLoader.item.scanning && shareLoader.item.hostsPage !== null)
+                shareLoader.item.open("smb://", "Network", shareLoader.item.hostsPage)
+        }
         function close() { if (shareLoader.item) shareLoader.item.close() }
         // ui/js/Focus.js shareBrowserAct's two other verbs, reached only while the overlay is up.
         function moveCursor(delta) { if (shareLoader.item) shareLoader.item.moveCursor(delta) }
@@ -773,6 +786,10 @@ Rectangle {
                 shareBrowser.owner.message("That network share cannot be opened here.", true)
                 return
             }
+            // A host row's own open is a wait the pane should own from the first instant: the
+            // crawl (its word "reading") holds it until the shares or the form replace it.
+            if (service.isBareRoot(uri))
+                shareBrowser.openReading(label, shareBrowser.owner)
             service.openChildShare(uri, label, shareBrowser.owner)
         }
     }

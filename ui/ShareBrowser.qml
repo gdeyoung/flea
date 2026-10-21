@@ -14,6 +14,9 @@ Item {
     // The ＋'s wait has its own page: discovery can take seconds to answer, and a blank pane
     // reads as broken. The crawl says the looking is ours, not the network's silence.
     property bool scanning: false
+    // The crawl's one word: "looking" while the LAN is asked, "reading" while a host's own
+    // shares are — ui/LoadingState.qml's word for a slow source, the same continuity.
+    property string scanWord: "looking"
     // The hosts page the shares page came from, so ".." steps back to it without re-asking avahi.
     property var hostsPage: null
 
@@ -58,8 +61,21 @@ Item {
     // The ＋'s own first page: opened the instant the browse is asked for, replaced by the hosts
     // rows when avahi answers (openHosts below) or by the form when the LAN stays quiet.
     function openScanning() {
+        root.scanWord = "looking"
+        root.openCrawl("Network")
+    }
+
+    // A host row's activation opens its page the same instant: mount, info and the listing can
+    // take seconds on a cold contact, and the crawl holds the pane for every one of them. The
+    // shares (open below) or the sign-in form replaces it.
+    function openReading(label) {
+        root.scanWord = "reading"
+        root.openCrawl(label || "")
+    }
+
+    function openCrawl(label) {
         root.baseUri = "smb://"
-        root.baseLabel = "Network"
+        root.baseLabel = label
         root.shares = []
         root.cursorIndex = 0
         root.scanning = true
@@ -154,7 +170,7 @@ Item {
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "looking"
+                text: root.scanWord
                 color: Theme.color.muted
                 font.family: Theme.font.family
                 font.pixelSize: Theme.font.caption
