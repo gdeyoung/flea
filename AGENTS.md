@@ -8360,9 +8360,22 @@ manually…", which fires `manualRequested()` and opens the form over the page t
 discovery first, manual entry one press away, `Ctrl+K`'s form unchanged for the address that is
 already known. No new activation path exists; the browser walks down one level on the machinery
 that was already there. An empty host list opens the form with the reason in its own status line
-rather than messaging a pane the user may not be looking at, and a first-ever contact can race
-the mount deadline exactly the way any first mount can; the second activation of the same row
-lists.
+rather than messaging a pane the user may not be looking at. A first-ever contact can race the
+mount deadline exactly the way any first mount can, so a bare-root browse gets one automatic
+warm retry: the deadline arm (`ui/NetworkMounts.qml`'s `mountTimeout`) restarts the mount leg
+once when it cut down a bare-root SMB mount (`_warmRetried`, reset by every fresh open), because
+gvfs usually finishes that negotiation seconds later and the retry lands on the already-mounted
+fast path; a server silent twice has answered, and the failure arm reports as before.
+
+An SMB server that mounts for a guest and then lists nothing is not failing — it is asking who
+is asking. The shares leg of a bare-root `smb://` open that exits cleanly with zero names routes
+to the sign-in form instead of the no-folder refusal: `failMount(reason, password, false,
+missing=true)` marks the result `missing-credential`, and with no dialog request pending the
+`retryRequested` handoff reopens the form pre-filled with the host and the reason ("This server
+shows a guest nothing. Sign in to see its shares."). The form's connect then runs the existing
+authenticated mount leg, the same listing reruns with the credential attached, and "Save place"
+pins it like any other. Anonymous stays the first try everywhere; the form appears only when a
+server answered and had nothing to show for it.
 
 A host's shares can carry a second protocol's rows beside them: when `showmount` is on PATH
 (probed once at startup, `command -v`, the present-only-when-installed rule), the shares leg of

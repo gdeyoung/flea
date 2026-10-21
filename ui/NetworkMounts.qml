@@ -81,6 +81,8 @@ Item {
     // Set right before mountTimeout terminates that leg's process, so its own onExited does not
     // also report a second, redundant failure for the exact same open attempt.
     property bool _mountTimedOut: false
+    // The deadline's one warm retry for a cold bare-root contact; reset by every fresh open.
+    property bool _warmRetried: false
     property bool _infoTimedOut: false
     property bool _listSharesTimedOut: false
 
@@ -529,6 +531,7 @@ Item {
         root._requestPassword = request.password || ""
         root._pendingOrigin = request.origin === undefined ? root.origin : request.origin
         root._mountFailed = false
+        root._warmRetried = false
         if (alreadyMounted) {
             root.result = "resolving"
             root.runInfo(uri)
@@ -833,6 +836,18 @@ Item {
             if (mountProcess.running) {
                 root._mountTimedOut = true
                 mountProcess.running = false
+                // A first-ever contact often completes in gvfs seconds after this deadline cut
+                // it down, and the next open then lands on the already-mounted fast path — so a
+                // bare-root browse gets one automatic warm retry before "no answer" is declared.
+                // Only once per open: a server that stays silent twice has answered.
+                if (!root._warmRetried && root.isBareRoot(root._pendingUri)
+                        && String(root._pendingUri).indexOf("smb://") === 0) {
+                    root._warmRetried = true
+                    root.result = "mounting"
+                    mountProcess.running = true
+                    mountTimeout.restart()
+                    return
+                }
             } else if (infoProcess.running) {
                 root._infoTimedOut = true
                 infoProcess.running = false
@@ -990,6 +1005,15 @@ Item {
             var body = String(listSharesOut.text || root._listSharesOutput || "")
             var names = body.split("\n").map(function (s) { return s.trim() }).filter(function (s) { return s.length > 0 })
             if (exitCode !== 0 || names.length === 0) {
+                // An SMB server that mounted and then shows a guest nothing is asking for a
+                // sign-in, not refusing: the form is the one place the account can be given,
+                // and its connect reopens this same listing with the credential attached.
+                if (exitCode === 0 && names.length === 0 && root.isBareRoot(root._pendingUri)
+                        && String(root._pendingUri).indexOf("smb://") === 0) {
+                    root.failMount("This server shows a guest nothing. Sign in to see its shares.",
+                                   root.passwordFor(root._pendingUri), false, true)
+                    return
+                }
                 root.failMount(Errors.WORDS.connectNoFolder, root.passwordFor(root._pendingUri))
                 return
             }
