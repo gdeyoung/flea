@@ -8359,8 +8359,18 @@ overlay reopens with that host's shares. The hosts page ends in its own last row
 manually…", which fires `manualRequested()` and opens the form over the page that led to it:
 discovery first, manual entry one press away, `Ctrl+K`'s form unchanged for the address that is
 already known. No new activation path exists; the browser walks down one level on the machinery
-that was already there. An empty host list opens the form with the reason in its own status line
-rather than messaging a pane the user may not be looking at. A first-ever contact can race the
+that was already there. Discovery takes seconds to answer, so `browseHosts()` opens the
+overlay's scanning page first (`ShareBrowser.openScanning()`: the `Spinner` crawl and one word,
+"looking", `ui/LoadingState.qml`'s terms) and the answer replaces it — hosts rows when avahi
+answers, the form when the LAN stays quiet (the crawl closes before that handoff, so the
+looking page never waits behind a dialog). An empty host list is a real answer, not a failure.
+
+The shares page carries its own way back: its first row is ".." (`backRow`), which reopens the
+hosts page `openHosts()` cached (`hostsPage`) — the level up the pane's own navigation cannot
+express, because the pane is already inside the share. The cache is instant, so ".." never
+re-asks the LAN for a list it just gave; a shares page opened without a hosts page behind it
+(a saved bare-root place from the rail) shows no back row, because there is nowhere of the
+browser's to go back to. A first-ever contact can race the
 mount deadline exactly the way any first mount can, so a bare-root browse gets one automatic
 warm retry: the deadline arm (`ui/NetworkMounts.qml`'s `mountTimeout`) restarts the mount leg
 once when it cut down a bare-root SMB mount (`_warmRetried`, reset by every fresh open), because

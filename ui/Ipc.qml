@@ -964,6 +964,7 @@ QtObject {
         // A protocol chip carries a label and no tree, so a test clicks its centre the way it does a row.
         function networkChipCentre(name: string): string { return root.networkDialog ? root.fleaWindow.centreOf(root.networkDialog.formChip(name)) : "" }
         function shareBrowserOpen(): bool { return root.shareBrowser ? root.shareBrowser.active : false }
+        function shareBrowserScanning(): bool { return root.shareBrowser ? root.shareBrowser.scanning : false }
         // One share name per line, in cursor order; empty when the overlay is shut.
         function shareBrowserEntries(): string { return root.shareBrowser ? root.shareBrowser.shares.join("\n") : "" }
         function shareBrowserCursor(): int { return root.shareBrowser ? root.shareBrowser.cursorIndex : -1 }

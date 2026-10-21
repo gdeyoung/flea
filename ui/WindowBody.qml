@@ -680,6 +680,9 @@ Rectangle {
         function onHostsListed(names, origin) {
             if (!origin) return
             if (!names || names.length === 0) {
+                // The crawl that opened with the ＋ ends here: the form takes the pane, so the
+                // looking page does not sit behind it waiting for an answer that already came.
+                shareBrowser.close()
                 networkDialog.openLocation("", "", "", "No network hosts answered. Type an address instead.", false, origin)
                 return
             }
@@ -703,9 +706,14 @@ Rectangle {
     // One entry point for both paths into discovery: the rail's "+" (below) and the dialog's
     // Browse button, so neither can drift from the other.
     function browseHosts(pane) {
+        // The crawl opens before the ask: the LAN's answer takes seconds, and the pane the ＋
+        // was pressed on should say "looking" for every one of them.
+        shareBrowser.openScanning(pane)
         var service = view.ensureNetworkService()
         if (service)
             service.listHosts(pane)
+        else
+            shareBrowser.close()
     }
 
     Connections {
@@ -739,6 +747,9 @@ Rectangle {
         readonly property bool active: shareLoader.item !== null && shareLoader.item.active
         function open(uri, label, names, origin) { owner = origin; shareLoader.active = true; shareLoader.item.open(uri, label, names) }
         function openHosts(names, origin) { owner = origin; shareLoader.active = true; shareLoader.item.openHosts(names) }
+        // The instant page: avahi can take seconds to answer, so the ＋ opens the crawl first
+        // and the answer replaces it — a blank pane in between reads as broken.
+        function openScanning(origin) { owner = origin; shareLoader.active = true; shareLoader.item.openScanning() }
         function close() { if (shareLoader.item) shareLoader.item.close() }
         // ui/js/Focus.js shareBrowserAct's two other verbs, reached only while the overlay is up.
         function moveCursor(delta) { if (shareLoader.item) shareLoader.item.moveCursor(delta) }
