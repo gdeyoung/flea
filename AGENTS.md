@@ -8340,20 +8340,37 @@ real to show instead of it.
 ### The hosts layer: avahi's answer becomes the browser's first page (downstream)
 
 The overlay above starts one level deeper than a user who does not know an address can reach.
-`avahi-browse -rt _smb._tcp` answers with one resolved service per LAN host, and
-`ui/js/Dnssd.js` folds that answer into `{ label, host }` rows (service name labels the row,
-the `hostname = [x.local]` line beneath it targets it, duplicates by host drop, `--` resets).
-`ui/NetworkMounts.qml`'s `listHosts()` runs it as its own Process with its own ten-second bound —
-not the mount deadline the share legs share, because a quiet LAN answers nothing and that is a
-real answer, not a failure — and fires `hostsListed(names, origin)`.
+avahi-browse answers with one resolved service per LAN host — and takes one service type per
+call, so the hosts leg runs two Process browses in parallel (`_smb._tcp` and `_sftp-ssh._tcp`)
+and `hostsReady()` merges them by host: SMB wins the row a host offers both, because that is how
+every other desktop reaches it, and an SSH-only host keeps `sftp://host/` as a row that is
+itself a URI. `ui/js/Dnssd.js` folds each answer into `{ label, host, kind }` rows (service name
+labels the row, the `hostname = [x.local]` line beneath it targets it, duplicates by host drop,
+any new service line — known or not, `=` or `+` — ends the previous service so a printer's
+hostname is never filed under a server). `ui/NetworkMounts.qml`'s `listHosts()` runs both with
+their own ten-second bound — not the mount deadline the share legs share, because a quiet LAN
+answers nothing and that is a real answer, not a failure — and fires `hostsListed(names, origin)`.
 
-The dialog's "Browse the network" button is the entry (`ui/NetworkDialog.qml`), and the rows it
-produces ride the bare workgroup root: `shareBrowser.open("smb://", "Network", names)` makes each
-host row's own activation the bare-root open that round 2 above already handles — mount, `gio
-info`, `listShares`, the overlay reopens with that host's shares. No new activation path exists;
-the browser walks down one level on the machinery that was already there. An empty host list
-messages the pane rather than opening an empty overlay, and a first-ever contact can race the
-mount deadline exactly the way any first mount can; the second activation of the same row lists.
+The rail's "+" is the entry (`ui/WindowBody.qml`'s `browseHosts()`, shared with the dialog's
+"Browse the network" button so the two cannot drift), and the rows it produces ride the bare
+workgroup root: `shareBrowser.openHosts(names)` makes each host row's own activation the
+bare-root open that round 2 above already handles — mount, `gio info`, `listShares`, the
+overlay reopens with that host's shares. The hosts page ends in its own last row, "Add
+manually…", which fires `manualRequested()` and opens the form over the page that led to it:
+discovery first, manual entry one press away, `Ctrl+K`'s form unchanged for the address that is
+already known. No new activation path exists; the browser walks down one level on the machinery
+that was already there. An empty host list opens the form with the reason in its own status line
+rather than messaging a pane the user may not be looking at, and a first-ever contact can race
+the mount deadline exactly the way any first mount can; the second activation of the same row
+lists.
+
+A host's shares can carry a second protocol's rows beside them: when `showmount` is on PATH
+(probed once at startup, `command -v`, the present-only-when-installed rule), the shares leg of
+an `smb://` host runs it before answering and appends one `nfs://host/export` row per export
+(`Dnssd.parseExports`, own eight-second bound — the SMB rows ship without NFS when the
+portmapper stays silent). NFS has no discovery service of its own, so its exports ride the hosts
+the LAN does advertise. A row that is itself a URI — an SSH-only host's root, an NFS export —
+activates as itself; a plain name stays a share of the open base.
 
 ### The rail's pin: browsing still writes nothing; this one row does (downstream)
 
