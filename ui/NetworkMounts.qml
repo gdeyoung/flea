@@ -6,6 +6,7 @@ import "js/Cloud.js" as Cloud
 import "js/Crumbs.js" as Crumbs
 import "js/Format.js" as Format
 import "js/Mounts.js" as Mounts
+import "js/Dnssd.js" as Dnssd
 import "js/Protocols.js" as Protocols
 import "js/Dropbox.js" as Dropbox
 
@@ -46,6 +47,11 @@ Item {
     signal startingBridge(string text, var origin)
     // Client-side only, see "listShares" below: ui/ShareBrowser.qml renders these as pane rows.
     signal sharesListed(string baseUri, string baseLabel, var names, var origin)
+
+    // The hosts layer of the network browser: avahi's resolved _smb._tcp services, one name per
+    // host, in the service's own spelling (AIBox.local). The share browser opens these as rows on
+    // the bare workgroup root, so activating a row runs the bare-root open that lists its shares.
+    signal hostsListed(var names, var origin)
     // Fired once ui/NetworkPlaces.qml's write has actually landed, so a caller's reload reads it.
     signal renamed()
     signal retryRequested(string uri, string label, string password, string reason, bool failedConnect, var origin)
@@ -77,6 +83,10 @@ Item {
     property bool _mountTimedOut: false
     property bool _infoTimedOut: false
     property bool _listSharesTimedOut: false
+
+    property string _hostsOutput: ""
+    property bool _hostsTimedOut: false
+    property Item _hostsOrigin: null
     // Set from "gio mount"'s own exit code and consumed by the "gio info" that follows it, which is
     // what actually decides whether the location is mounted; this only colours the failure message.
     property bool _mountFailed: false
@@ -381,7 +391,7 @@ Item {
                 var coveredKey = Mounts.normalize(marks[j].uri)
                 if (seen[coveredKey]) continue
                 seen[coveredKey] = true
-                out.push({ path: "", label: marks[j].label, group: "network", kind: "share", uri: marks[j].uri, mountUri: mounts[i].uri, mounted: true, glyph: "server" })
+                out.push({ path: "", label: marks[j].label, group: "network", kind: "share", uri: marks[j].uri, mountUri: mounts[i].uri, mounted: true, saved: true, glyph: "server" })
             }
             if (covered) continue
             var mkey = Mounts.normalize(mounts[i].uri)
@@ -393,7 +403,7 @@ Item {
             var bkey = Mounts.normalize(marks[k].uri)
             if (seen[bkey]) continue
             seen[bkey] = true
-            out.push({ path: "", label: marks[k].label, group: "network", kind: "share", uri: marks[k].uri, mounted: false, glyph: "server" })
+            out.push({ path: "", label: marks[k].label, group: "network", kind: "share", uri: marks[k].uri, mounted: false, saved: true, glyph: "server" })
         }
         if (root.dropboxPath.length > 0) {
             out.push({ path: root.dropboxPath, label: "Dropbox", group: "network", kind: "dropbox", uri: "", mounted: true, glyph: "" })
@@ -704,6 +714,17 @@ Item {
         mountTimeout.restart()
     }
 
+    // The hosts leg is client-side only and shares no state with the mount legs: avahi's own
+    // browse answers in well under a second on a live LAN and not at all on a quiet one, so it
+    // carries its own bound instead of the mount deadline. An empty answer is a real answer and
+    // reaches the window host, which says so rather than opening an empty browser.
+    function listHosts(origin) {
+        root._hostsOrigin = origin
+        root._hostsOutput = ""
+        hostsProcess.running = true
+        hostsTimeout.restart()
+    }
+
     // One shared ContextMenu preserves keyboard focus; this service performs its Unmount action.
     function unmount(index) {
         var e = root.entries[index]
@@ -721,6 +742,11 @@ Item {
     function rename(uri, name) { places.rename(uri, name) }
     function forget(uri) { places.forget(uri) }
     function replacePlace(oldUri) { places.replace(oldUri, root._pendingUri, root._pendingLabel) }
+
+    // The rail's own pin: a mounted share the browser opened becomes a saved place, the one-way
+    // counterpart of forget(). Browsing itself never writes a bookmark (AGENTS.md "The share
+    // browser overlay"); this is the explicit gesture that does.
+    function savePlace(uri, label) { places.add(uri, label) }
     function pollMounts() { listing.poll() }
 
     Timer {
@@ -895,6 +921,39 @@ Item {
             root.result = "mounted"
             root.finishRequest(true, "")
             root.sharesListed(root._pendingUri, root._pendingLabel, names, root._pendingOrigin)
+        }
+    }
+
+    Process {
+        id: hostsProcess
+        environment: root.gioEnvironment
+        command: ["avahi-browse", "-rt", "_smb._tcp"]
+        stdout: StdioCollector { id: hostsOut; waitForEnd: true; onStreamFinished: root._hostsOutput = text }
+        onExited: function (exitCode) {
+            hostsTimeout.stop()
+            var timedOut = root._hostsTimedOut
+            root._hostsTimedOut = false
+            if (timedOut) return
+            var hosts = Dnssd.parse(String(hostsOut.text || root._hostsOutput || ""))
+            var names = []
+            for (var i = 0; i < hosts.length; i++)
+                names.push(hosts[i].host)
+            root.hostsListed(names, root._hostsOrigin)
+        }
+    }
+
+    Timer {
+        id: hostsTimeout
+        // Generous beside avahi's sub-second answer, but bounded: a browse that never ends
+        // must not leave the dialog's origin waiting forever.
+        interval: 10000
+        repeat: false
+        onTriggered: {
+            if (hostsProcess.running) {
+                root._hostsTimedOut = true
+                hostsProcess.running = false
+                root.hostsListed([], root._hostsOrigin)
+            }
         }
     }
 

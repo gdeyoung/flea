@@ -8337,6 +8337,45 @@ Enter on a row calls the exact same `openShare(uri, false, label)` a bookmarked 
 mounts but is slow to enumerate over the network still shows the overlay until there is something
 real to show instead of it.
 
+### The hosts layer: avahi's answer becomes the browser's first page (downstream)
+
+The overlay above starts one level deeper than a user who does not know an address can reach.
+`avahi-browse -rt _smb._tcp` answers with one resolved service per LAN host, and
+`ui/js/Dnssd.js` folds that answer into `{ label, host }` rows (service name labels the row,
+the `hostname = [x.local]` line beneath it targets it, duplicates by host drop, `--` resets).
+`ui/NetworkMounts.qml`'s `listHosts()` runs it as its own Process with its own ten-second bound —
+not the mount deadline the share legs share, because a quiet LAN answers nothing and that is a
+real answer, not a failure — and fires `hostsListed(names, origin)`.
+
+The dialog's "Browse the network" button is the entry (`ui/NetworkDialog.qml`), and the rows it
+produces ride the bare workgroup root: `shareBrowser.open("smb://", "Network", names)` makes each
+host row's own activation the bare-root open that round 2 above already handles — mount, `gio
+info`, `listShares`, the overlay reopens with that host's shares. No new activation path exists;
+the browser walks down one level on the machinery that was already there. An empty host list
+messages the pane rather than opening an empty overlay, and a first-ever contact can race the
+mount deadline exactly the way any first mount can; the second activation of the same row lists.
+
+### The rail's pin: browsing still writes nothing; this one row does (downstream)
+
+Round 2's rule stands — browsing never writes a bookmark — but a share the browser mounted then
+vanishes with its unmount, and the rail is where the user is looking when they decide to keep
+one. A mounted share the bookmarks file does not cover (`entry.saved !== true`) offers "Save
+place" between Rename and Edit address (`ui/js/Menu.js`, the pin glyph from `Icons.js`), which
+calls `RailMenu.pinShare()` → `NetworkMounts.savePlace()` → `NetworkPlaces.add()`, the append
+half of `replace()`'s own writer: read the file itself, `Places.replace(body, "", uri, name)`,
+write. Kernel mounts keep their `editable: false` refusal — fstab's mounts are fstab's to keep —
+and a saved row offers Rename and Remove instead, so the pin's own row disappears once its work
+is done. Saved-but-unmounted rows now carry `saved: true` from the entry build in
+`ui/NetworkMounts.qml` so the rule reads one flag instead of re-deriving coverage.
+
+### The dialog's Escape lands on the root, not a sibling (downstream)
+
+The form's fields hold the caret whenever the dialog is open, and a key travels from the focused
+item up that item's own parents. Both existing Escape handlers sat where no field's key could
+reach them: `pendingFocus` is a sibling of the card, and the card's focus ring wraps the fields
+without being their parent. `ui/NetworkDialog.qml`'s root Item now carries the Escape — every
+field's ancestor — and `close()` still refuses mid-save on its own.
+
 ### "Already mounted" is not just a bare-root quirk
 
 Proving the overlay's own Enter action live against the real NAS surfaced a second bug in code

@@ -655,6 +655,13 @@ Rectangle {
             networkDialog.owner.saveLocation(uri, label, password, requestId, networkDialog.origin)
         }
         function onCancelRequested(requestId) { if (networkDialog.owner) networkDialog.owner.cancelLocation(requestId) }
+        // The dialog's Browse trades the form for discovery; the hosts answer reopens this dialog's
+        // origin as the share browser's host rows, exactly as a listed server's shares would.
+        function onBrowseRequested() {
+            networkDialog.owner = view.ensureNetworkService()
+            if (networkDialog.owner)
+                networkDialog.owner.listHosts(networkDialog.origin || view.currentPane)
+        }
     }
 
     // The dialog's answer lands here rather than on the rail, so it lands whether the rail is
@@ -668,6 +675,16 @@ Rectangle {
             if (networkDialog.item) networkDialog.item.mountFinished(requestId, uri, success, reason, connectFailed)
         }
         function onSharesListed(baseUri, baseLabel, names, origin) { if (origin) shareBrowser.open(baseUri, baseLabel, names, origin) }
+        // Hosts rows ride the bare workgroup root: activating one is the bare-root open whose
+        // answer is its shares, so the browser walks down one level without new routing here.
+        function onHostsListed(names, origin) {
+            if (!origin) return
+            if (!names || names.length === 0) {
+                origin.message("No network hosts answered. Check the network, or type an address instead.", false)
+                return
+            }
+            shareBrowser.open("smb://", "Network", names, origin)
+        }
         function onRetryRequested(uri, label, password, reason, failedConnect, origin) {
             networkDialog.openLocation(uri, label, password, reason, failedConnect, origin)
         }

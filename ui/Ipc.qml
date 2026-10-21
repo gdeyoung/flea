@@ -708,6 +708,28 @@ QtObject {
         }
         // The menu's own removal path, so the drag suite can unpin without synthesising pointer menus.
         function favouriteRemove(i: int): bool { return Favourites.remove(i) }
+        // The network browser's hosts leg, fired the way the dialog's Browse button fires it; the
+        // answer is read back with the share browser probes below.
+        function networkBrowse(): void {
+            var service = root.pane.ensureNetworkService()
+            if (service)
+                service.listHosts(root.pane)
+        }
+        // The dialog's Browse button itself, so the mouse lane can press it where it sits.
+        function networkBrowseButton(): string {
+            return root.networkDialog ? root.fleaWindow.centreOf(root.networkDialog.browseButtonCentre) : ""
+        }
+        // The rail pin's own write, so the lane can save a mounted share without a synthesised
+        // right click; the menu row that calls this is specified in tests/js/menu.js.
+        function networkSavePlace(i: int): bool {
+            var sidebar = root.pane.sidebar
+            var entry = sidebar.networkEntries[i]
+            var service = root.pane.ensureNetworkService()
+            if (!entry || !service)
+                return false
+            service.savePlace(entry.uri, entry.label)
+            return true
+        }
         function railLabel(i: int): string { var item = root.pane.sidebar.railItemFor(i); return item ? item.modelData.label : "" }
         function railLabels(): string { var out = []; for (var i = 0; i < root.pane.railCount; i++) { var item = root.pane.sidebar.railItemFor(i); out.push(item ? item.modelData.label : "") } return out.join("|") }
         // The sidebar pushes the row and the header right by its own width, so a pixel-crop test needs this rather than assuming x=0.
