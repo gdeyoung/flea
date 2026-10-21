@@ -715,6 +715,26 @@ QtObject {
             if (service)
                 service.listHosts(root.pane)
         }
+        // The rail's own "+" press, which is what the lane would click: the mark's handler only
+        // raises this signal, so raising it exercises the same path the pointer takes.
+        function networkAddRequested(): string {
+            root.pane.sidebar.addRequested()
+            return "raised"
+        }
+        // One row of the share browser, activated the way Enter activates the row under the
+        // cursor; the manual row is the last one, so the lane can name it by index.
+        function shareBrowserActivate(i: int): bool {
+            var browser = root.shareBrowser
+            if (!browser) return false
+            browser.cursorIndex = i
+            browser.activateCursor()
+            return true
+        }
+        function shareBrowserLastIndex(): int {
+            var browser = root.shareBrowser
+            if (!browser) return -1
+            return browser.shares.length - 1
+        }
         // The dialog's Browse button itself, so the mouse lane can press it where it sits.
         function networkBrowseButton(): string {
             return root.networkDialog ? root.fleaWindow.centreOf(root.networkDialog.browseButtonCentre) : ""

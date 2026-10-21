@@ -658,9 +658,7 @@ Rectangle {
         // The dialog's Browse trades the form for discovery; the hosts answer reopens this dialog's
         // origin as the share browser's host rows, exactly as a listed server's shares would.
         function onBrowseRequested() {
-            networkDialog.owner = view.ensureNetworkService()
-            if (networkDialog.owner)
-                networkDialog.owner.listHosts(networkDialog.origin || view.currentPane)
+            view.browseHosts(networkDialog.origin || view.currentPane)
         }
     }
 
@@ -677,13 +675,15 @@ Rectangle {
         function onSharesListed(baseUri, baseLabel, names, origin) { if (origin) shareBrowser.open(baseUri, baseLabel, names, origin) }
         // Hosts rows ride the bare workgroup root: activating one is the bare-root open whose
         // answer is its shares, so the browser walks down one level without new routing here.
+        // An empty LAN is a real answer with nothing to show: the form opens with the reason in
+        // its own banner, so the "+" still leads somewhere that can connect.
         function onHostsListed(names, origin) {
             if (!origin) return
             if (!names || names.length === 0) {
-                origin.message("No network hosts answered. Check the network, or type an address instead.", false)
+                networkDialog.openLocation("", "", "", "No network hosts answered. Type an address instead.", false, origin)
                 return
             }
-            shareBrowser.open("smb://", "Network", names, origin)
+            shareBrowser.openHosts(names, origin)
         }
         function onRetryRequested(uri, label, password, reason, failedConnect, origin) {
             networkDialog.openLocation(uri, label, password, reason, failedConnect, origin)
@@ -700,9 +700,17 @@ Rectangle {
         function onRenamed() { if (view.currentPane.sidebar) view.currentPane.sidebar.reloadBookmarks() }
     }
 
+    // One entry point for both paths into discovery: the rail's "+" (below) and the dialog's
+    // Browse button, so neither can drift from the other.
+    function browseHosts(pane) {
+        var service = view.ensureNetworkService()
+        if (service)
+            service.listHosts(pane)
+    }
+
     Connections {
         target: view.currentPane.sidebar
-        function onAddRequested() { networkDialog.open() }
+        function onAddRequested() { view.browseHosts(view.currentPane) }
         function onEditRequested(uri, label, password, reason, failedConnect, origin) {
             networkDialog.openLocation(uri, label, password, reason, failedConnect, origin)
         }
@@ -730,6 +738,7 @@ Rectangle {
         height: owner ? owner.listSlot.height : 0
         readonly property bool active: shareLoader.item !== null && shareLoader.item.active
         function open(uri, label, names, origin) { owner = origin; shareLoader.active = true; shareLoader.item.open(uri, label, names) }
+        function openHosts(names, origin) { owner = origin; shareLoader.active = true; shareLoader.item.openHosts(names) }
         function close() { if (shareLoader.item) shareLoader.item.close() }
         // ui/js/Focus.js shareBrowserAct's two other verbs, reached only while the overlay is up.
         function moveCursor(delta) { if (shareLoader.item) shareLoader.item.moveCursor(delta) }
@@ -739,6 +748,12 @@ Rectangle {
     Connections {
         target: shareLoader.item
         function onClosed() { view.currentPane.forceActiveFocus() }
+        // The hosts page's last row: the form opens over the page that led to it, the mirror of
+        // the dialog's Browse button closing the form for the page.
+        function onManualRequested() {
+            shareBrowser.close()
+            networkDialog.open()
+        }
         function onActivated(uri, label) {
             view.focusPane(shareBrowser.owner === primaryPane ? 0 : 1)
             // The host outlives the rail, so a hidden rail never blocks a share the browser lists.

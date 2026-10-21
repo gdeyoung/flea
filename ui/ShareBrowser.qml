@@ -15,6 +15,13 @@ Item {
     signal closed()
     // The resolved share uri and name, the same shape openShare() already takes for a bookmarked share; ui/WindowBody.qml routes this through the window-long host's openChildShare.
     signal activated(string uri, string label)
+    // The hosts page's own last row, so the form stays one click away from discovery.
+    signal manualRequested()
+
+    // The hosts page rides the bare workgroup root and ends in the form: the row is a name like
+    // any other so navigation, hover and keys treat it identically, and activation is the one
+    // special case below.
+    readonly property string manualRow: "Add manually…"
 
     // active flips instantly (open()/close() below), so shareBrowserOpen()'s IPC read never races
     // the close fade; visible only stays true a little longer, until content's opacity finishes it.
@@ -35,6 +42,13 @@ Item {
         root.active = true
     }
 
+    // Discovery's first page: the LAN's hosts, one row each, with the form behind the last row.
+    function openHosts(names) {
+        var rows = names.slice(0)
+        rows.push(root.manualRow)
+        root.open("smb://", "Network", rows)
+    }
+
     // Idempotent, so wiring this to every Pane navigation (including one this overlay itself just requested) costs nothing once already shut.
     function close() {
         if (!root.active)
@@ -53,6 +67,16 @@ Item {
         var name = root.shares[root.cursorIndex]
         if (name === undefined)
             return
+        if (name === root.manualRow) {
+            root.manualRequested()
+            return
+        }
+        // A row that is itself a URI — an SSH-only host's root, or an NFS export read beside a
+        // host's SMB shares — activates as itself; a plain name is a share of the open base.
+        if (name.indexOf("://") >= 0) {
+            root.activated(name, name)
+            return
+        }
         var base = root.baseUri.charAt(root.baseUri.length - 1) === "/" ? root.baseUri : root.baseUri + "/"
         root.activated(base + name + "/", name)
     }

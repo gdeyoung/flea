@@ -87,6 +87,10 @@ Item {
     property string _hostsOutput: ""
     property bool _hostsTimedOut: false
     property Item _hostsOrigin: null
+    property var _hostsSmb: []
+    property var _hostsSftp: []
+    property bool _hostsSmbDone: false
+    property bool _hostsSftpDone: false
     // Set from "gio mount"'s own exit code and consumed by the "gio info" that follows it, which is
     // what actually decides whether the location is mounted; this only colours the failure message.
     property bool _mountFailed: false
@@ -714,6 +718,49 @@ Item {
         mountTimeout.restart()
     }
 
+    // A host that also exports NFS shows those exports beside its SMB shares, because the rows
+    // beneath a host are "what this machine offers", not "what one protocol offers". NFS has no
+    // discovery service of its own, so its exports are read per-host with showmount the moment a
+    // host is chosen, and only when showmount is installed at all — the share rows stay SMB-only
+    // everywhere else, the way a present-only-when-installed extra always behaves here.
+    property bool _showmountAvailable: false
+    property string _nfsHost: ""
+    property var _nfsNames: []
+    property var _nfsOrigin: null
+    property bool _nfsTimedOut: false
+
+    function hostOf(uri) {
+        var rest = String(uri || "").replace(/^smb:\/\//, "")
+        var slash = rest.indexOf("/")
+        return slash < 0 ? rest : rest.slice(0, slash)
+    }
+
+    function emitShares(names, origin) {
+        root.result = "mounted"
+        root.finishRequest(true, "")
+        root.sharesListed(root._pendingUri, root._pendingLabel, names, origin)
+    }
+
+    function listNfsExports(host, names, origin) {
+        root._nfsHost = host
+        root._nfsNames = names
+        root._nfsOrigin = origin
+        showmountProcess.command = ["showmount", "-e", host]
+        showmountProcess.running = true
+        nfsTimeout.restart()
+    }
+
+    // The availability probe runs once, before any share listing can need its answer.
+    Component.onCompleted: {
+        showmountProbe.running = true
+    }
+
+    Process {
+        id: showmountProbe
+        command: ["sh", "-c", "command -v showmount"]
+        onExited: function (exitCode) { root._showmountAvailable = exitCode === 0 }
+    }
+
     // The hosts leg is client-side only and shares no state with the mount legs: avahi's own
     // browse answers in well under a second on a live LAN and not at all on a quiet one, so it
     // carries its own bound instead of the mount deadline. An empty answer is a real answer and
@@ -721,8 +768,36 @@ Item {
     function listHosts(origin) {
         root._hostsOrigin = origin
         root._hostsOutput = ""
+        root._hostsSmb = []
+        root._hostsSftp = []
+        root._hostsSmbDone = false
+        root._hostsSftpDone = false
         hostsProcess.running = true
+        hostsSftpProcess.running = true
         hostsTimeout.restart()
+    }
+
+    // The two browses answer independently, so the rows wait for both: a host that offers SMB
+    // and SSH is one row reached the way every other desktop reaches it, and a host that
+    // offers only SSH keeps its own root as a row that is itself a URI.
+    function hostsReady() {
+        if (!root._hostsSmbDone || !root._hostsSftpDone)
+            return
+        hostsTimeout.stop()
+        var names = []
+        var seen = ({})
+        var i
+        for (i = 0; i < root._hostsSmb.length; i++) {
+            seen[root._hostsSmb[i].host] = true
+            names.push(root._hostsSmb[i].host)
+        }
+        for (i = 0; i < root._hostsSftp.length; i++) {
+            if (seen[root._hostsSftp[i].host])
+                continue
+            seen[root._hostsSftp[i].host] = true
+            names.push(Dnssd.hostUri(root._hostsSftp[i]))
+        }
+        root.hostsListed(names, root._hostsOrigin)
     }
 
     // One shared ContextMenu preserves keyboard focus; this service performs its Unmount action.
@@ -918,27 +993,73 @@ Item {
                 root.failMount(Errors.WORDS.connectNoFolder, root.passwordFor(root._pendingUri))
                 return
             }
-            root.result = "mounted"
-            root.finishRequest(true, "")
-            root.sharesListed(root._pendingUri, root._pendingLabel, names, root._pendingOrigin)
+            if (root._showmountAvailable && String(root._pendingUri).indexOf("smb://") === 0) {
+                // The SMB answer stands on its own; NFS rows join it or it ships without them.
+                root.listNfsExports(root.hostOf(root._pendingUri), names, root._pendingOrigin)
+                return
+            }
+            root.emitShares(names, root._pendingOrigin)
+        }
+    }
+
+    Process {
+        id: showmountProcess
+        environment: root.gioEnvironment
+        command: ["showmount", "-e"]
+        onExited: function (exitCode) {
+            nfsTimeout.stop()
+            var timedOut = root._nfsTimedOut
+            root._nfsTimedOut = false
+            if (timedOut) return
+            var names = root._nfsNames
+            if (exitCode === 0) {
+                var exports = Dnssd.parseExports(String(showmountOut.text || ""))
+                for (var i = 0; i < exports.length; i++)
+                    names.push("nfs://" + root._nfsHost + exports[i])
+            }
+            root.emitShares(names, root._nfsOrigin)
+        }
+        stdout: StdioCollector { id: showmountOut; waitForEnd: true }
+    }
+
+    Timer {
+        id: nfsTimeout
+        // showmount against a portmapper that will not answer hangs like any other dead leg;
+        // the SMB rows already in hand ship without waiting longer than this.
+        interval: 8000
+        repeat: false
+        onTriggered: {
+            if (showmountProcess.running) {
+                root._nfsTimedOut = true
+                showmountProcess.running = false
+                root.emitShares(root._nfsNames, root._nfsOrigin)
+            }
         }
     }
 
     Process {
         id: hostsProcess
         environment: root.gioEnvironment
+        // avahi-browse takes one service type per call, so the SMB half of the answer is its
+        // own browse; the SSH half sits in the process below and the two are merged by host.
         command: ["avahi-browse", "-rt", "_smb._tcp"]
         stdout: StdioCollector { id: hostsOut; waitForEnd: true; onStreamFinished: root._hostsOutput = text }
         onExited: function (exitCode) {
-            hostsTimeout.stop()
-            var timedOut = root._hostsTimedOut
-            root._hostsTimedOut = false
-            if (timedOut) return
-            var hosts = Dnssd.parse(String(hostsOut.text || root._hostsOutput || ""))
-            var names = []
-            for (var i = 0; i < hosts.length; i++)
-                names.push(hosts[i].host)
-            root.hostsListed(names, root._hostsOrigin)
+            root._hostsSmb = Dnssd.parse(String(hostsOut.text || root._hostsOutput || ""))
+            root._hostsSmbDone = true
+            root.hostsReady()
+        }
+    }
+
+    Process {
+        id: hostsSftpProcess
+        environment: root.gioEnvironment
+        command: ["avahi-browse", "-rt", "_sftp-ssh._tcp"]
+        stdout: StdioCollector { id: hostsSftpOut; waitForEnd: true }
+        onExited: function (exitCode) {
+            root._hostsSftp = Dnssd.parse(String(hostsSftpOut.text || ""))
+            root._hostsSftpDone = true
+            root.hostsReady()
         }
     }
 
@@ -949,10 +1070,13 @@ Item {
         interval: 10000
         repeat: false
         onTriggered: {
-            if (hostsProcess.running) {
+            if (hostsProcess.running || hostsSftpProcess.running) {
                 root._hostsTimedOut = true
                 hostsProcess.running = false
-                root.hostsListed([], root._hostsOrigin)
+                hostsSftpProcess.running = false
+                root._hostsSmbDone = true
+                root._hostsSftpDone = true
+                root.hostsReady()
             }
         }
     }
