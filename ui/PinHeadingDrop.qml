@@ -57,10 +57,15 @@ DropArea {
         root.disarm()
         if (!path) { drop.accepted = false; return }
         // add answers only that the save started; the saved-or-not answer is Favourites.completed.
-        root.pinLabel = PinDrop.label(path)
-        root.pinRequestId = "pindrop-" + (++root.pinSeq)
-        if (Favourites.add(path, root.pinLabel, root.pinRequestId)) drop.accept(Qt.CopyAction)
-        else drop.accepted = false
+        // A refused add must not touch the pinned request: the save it refused is still owed its
+        // own completion, and a replaced id would swallow that answer's toast.
+        var label = PinDrop.label(path)
+        var requestId = "pindrop-" + (++root.pinSeq)
+        if (Favourites.add(path, label, requestId)) {
+            root.pinLabel = label
+            root.pinRequestId = requestId
+            drop.accept(Qt.CopyAction)
+        } else drop.accepted = false
     }
     Connections {
         target: root.pane ? root.pane.backend : null
@@ -75,8 +80,11 @@ DropArea {
         target: Favourites
         function onCompleted(requestId, success, message) {
             if (requestId !== root.pinRequestId) return
-            root.sidebar.message(success ? "Pinned " + root.pinLabel + " to Favorites"
-                : (message || "The favorite did not save."), !success)
+            // success with a message is the readback-failed shape: the file kept the row, but the
+            // confirmation read did not come back, which is not a pin the user can trust.
+            var completed = success && !message
+            root.sidebar.message(completed ? "Pinned " + root.pinLabel + " to Favorites"
+                : (message || "The favorite did not save."), !completed)
         }
     }
 
