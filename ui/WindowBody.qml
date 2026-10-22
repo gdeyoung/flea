@@ -625,9 +625,11 @@ Rectangle {
         property var owner: null
         property Item origin: null
         readonly property bool opened: item !== null && item.opened
-        function open() {
+        function open(holder) {
             if (opened) return
-            origin = view.currentPane
+            // The pane that asked for the form is the one its answer returns to; the hosts page's
+            // manual row passes its own owner, which in dual view is not always the focused pane.
+            origin = holder || view.currentPane
             active = true
             item.open()
         }
@@ -679,6 +681,9 @@ Rectangle {
         // its own banner, so the "+" still leads somewhere that can connect.
         function onHostsListed(names, origin) {
             if (!origin) return
+            // A late answer from a browse the pane already left steers nothing: only a crawl still
+            // waiting on hosts may become rows, or hand the pane to the form.
+            if (!shareBrowser.active || !shareBrowser.scanning) return
             if (!names || names.length === 0) {
                 // The crawl that opened with the ＋ ends here: the form takes the pane, so the
                 // looking page does not sit behind it waiting for an answer that already came.
@@ -749,6 +754,10 @@ Rectangle {
         width: owner ? owner.listSlot.width : 0
         height: owner ? owner.listSlot.height : 0
         readonly property bool active: shareLoader.item !== null && shareLoader.item.active
+        // The crawl's own mark, forwarded the way active is: a handler that asks whether the
+        // browser is still waiting (a late answer must steer nothing) reads the wrapper, not
+        // the loader's item, and the wrapper without this read undefined as false.
+        readonly property bool scanning: shareLoader.item !== null && shareLoader.item.scanning
         function open(uri, label, names, origin) { owner = origin; shareLoader.active = true; shareLoader.item.open(uri, label, names) }
         function openHosts(names, origin) { owner = origin; shareLoader.active = true; shareLoader.item.openHosts(names) }
         // The instant page: avahi can take seconds to answer, so the ＋ opens the crawl first
@@ -775,8 +784,11 @@ Rectangle {
         // The hosts page's last row: the form opens over the page that led to it, the mirror of
         // the dialog's Browse button closing the form for the page.
         function onManualRequested() {
+            // Captured before the close: the browser's owner is the pane the form's mount answer
+            // must return to, and view.currentPane can differ from it in dual view.
+            var holder = shareBrowser.owner
             shareBrowser.close()
-            networkDialog.open()
+            networkDialog.open(holder)
         }
         function onActivated(uri, label) {
             view.focusPane(shareBrowser.owner === primaryPane ? 0 : 1)

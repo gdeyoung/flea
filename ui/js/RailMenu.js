@@ -53,8 +53,10 @@ function pinShare(mounts, sidebar, share) {
     var entry = sidebar.networkEntries[share]
     if (!entry)
         return
-    mounts.savePlace(entry.uri, entry.label)
-    sidebar.navigationPane.message(Format.fill(Mounts.WORDS.placeSaved, entry.label), false)
+    // The write's own answer decides the toast: a place that did not land is not said saved,
+    // and the writer has already said why on the pane it failed to reach the file on.
+    if (mounts.savePlace(entry.uri, entry.label))
+        sidebar.navigationPane.message(Format.fill(Mounts.WORDS.placeSaved, entry.label), false)
 }
 
 // Each attempt this dialog makes, so a mount that was already in flight when the rail armed cannot

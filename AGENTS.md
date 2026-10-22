@@ -9697,3 +9697,31 @@ A second host's browse while a `showmount` ask is still in flight
 supersedes it (`_nfsSuperseded`, set by the replacing browse, read and cleared only by the
 dying exit — the one-way rule of `_nfsTimedOut`), so a stale portmapper answer can neither
 stop the live ask's timer nor append the wrong host's exports to it.
+
+The review round after those lines (2026-10-21) verified Quickshell's Process
+restart directly instead of trusting either reading of the docs: a config that
+starts a process, stops it and starts it again in the same synchronous block
+prints two started/exited pairs (15/1 then 0/0), so the stop-then-start the warm
+retry and the NFS supersede use genuinely begins the replacement leg. What the
+hosts leg still owed was the same rule the showmount leg already had, and the
+review caught it: `listHosts` now ends any browse still in flight and stamps the
+run (`_hostsLiveRun` with per-leg `_hostsSmbStamp`/`_hostsSftpStamp`), both
+avahi exits drop answers whose stamp is not the live run, and the timeout arm
+advances the run before it kills so the dying pair's late exits land nowhere. A
+A late hosts answer the window no longer waits for steers nothing
+(`ui/WindowBody.qml` handles it only while the crawl is still scanning, and the
+share browser wrapper forwards the crawl's `scanning` the way it already
+forwarded `active` — a wrapper read that is not forwarded reads `undefined`,
+which is falsy, which is how a guard meant to drop late answers silently drops
+every one), the hosts page's way back dies with the session that asked for it
+(`ui/ShareBrowser.qml` clears its cache on close, so an unrelated server root
+carries no stale ".." row), the manual row's form opens on the browser's own
+owner rather than the focused pane, and the pin's toast waits on the bookmark
+write's own answer (`NetworkPlaces.add` returns it through
+`NetworkMounts.savePlace` to `RailMenu.pinShare`, which no longer says saved on
+a write that refused). `ui/PinHeadingDrop.qml` keeps its refused drops from
+replacing the pinned request and treats a completed save whose readback failed
+as the failure it is. Two ceilings move, each re-derived with `wc -l`:
+`ui/NetworkMounts.qml` 1141 to 1166 for the run stamp and its guards, and
+`ui/WindowBody.qml` 877 to 889 for the late-answer guard, the manual row's
+holder, and the wrapper's `scanning` forward.

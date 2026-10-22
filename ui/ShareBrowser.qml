@@ -95,6 +95,9 @@ Item {
         if (!root.active)
             return
         root.active = false
+        // The hosts page's way back dies with the session that asked for it: a later unrelated
+        // server root must not carry a ".." row into a list that ended.
+        root.hostsPage = null
         root.closed()
     }
 

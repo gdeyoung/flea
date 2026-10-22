@@ -88,6 +88,13 @@ Item {
 
     property string _hostsOutput: ""
     property bool _hostsTimedOut: false
+    // The hosts leg's answers belong to the run that asked for them. A browse that a timeout
+    // killed, or one a newer ＋ replaced, must not write rows into the live run's arrays or emit
+    // a second answer under it, so each start stamps the run and only an exit carrying the
+    // window's current stamp counts — the same one-way rule the showmount leg below already uses.
+    property int _hostsLiveRun: 0
+    property int _hostsSmbStamp: 0
+    property int _hostsSftpStamp: 0
     property Item _hostsOrigin: null
     property var _hostsSmb: []
     property var _hostsSftp: []
@@ -785,12 +792,23 @@ Item {
     // carries its own bound instead of the mount deadline. An empty answer is a real answer and
     // reaches the window host, which says so rather than opening an empty browser.
     function listHosts(origin) {
+        // A browse still in flight belongs to an ask this one replaces: end it, so its late exit
+        // carries a stale stamp and lands nowhere, and the starts below genuinely begin this
+        // run's own pair (a running Process ignores running = true; the restart after a stop
+        // starts fresh — verified against Quickshell directly, see AGENTS.md).
+        if (hostsProcess.running || hostsSftpProcess.running) {
+            hostsProcess.running = false
+            hostsSftpProcess.running = false
+        }
         root._hostsOrigin = origin
         root._hostsOutput = ""
         root._hostsSmb = []
         root._hostsSftp = []
         root._hostsSmbDone = false
         root._hostsSftpDone = false
+        root._hostsLiveRun += 1
+        root._hostsSmbStamp = root._hostsLiveRun
+        root._hostsSftpStamp = root._hostsLiveRun
         hostsProcess.running = true
         hostsSftpProcess.running = true
         hostsTimeout.restart()
@@ -839,8 +857,10 @@ Item {
 
     // The rail's own pin: a mounted share the browser opened becomes a saved place, the one-way
     // counterpart of forget(). Browsing itself never writes a bookmark (AGENTS.md "The share
-    // browser overlay"); this is the explicit gesture that does.
-    function savePlace(uri, label) { places.add(uri, label) }
+    // browser overlay"); this is the explicit gesture that does. The write's own answer rides
+    // back up: a toast that says saved on a write that refused would lose the share at unmount
+    // while insisting it was kept.
+    function savePlace(uri, label) { return places.add(uri, label) }
     function pollMounts() { listing.poll() }
 
     Timer {
@@ -1090,6 +1110,7 @@ Item {
         command: ["avahi-browse", "-rt", "_smb._tcp"]
         stdout: StdioCollector { id: hostsOut; waitForEnd: true; onStreamFinished: root._hostsOutput = text }
         onExited: function (exitCode) {
+            if (root._hostsSmbStamp !== root._hostsLiveRun) return
             root._hostsSmb = Dnssd.parse(String(hostsOut.text || root._hostsOutput || ""))
             root._hostsSmbDone = true
             root.hostsReady()
@@ -1102,6 +1123,7 @@ Item {
         command: ["avahi-browse", "-rt", "_sftp-ssh._tcp"]
         stdout: StdioCollector { id: hostsSftpOut; waitForEnd: true }
         onExited: function (exitCode) {
+            if (root._hostsSftpStamp !== root._hostsLiveRun) return
             root._hostsSftp = Dnssd.parse(String(hostsSftpOut.text || ""))
             root._hostsSftpDone = true
             root.hostsReady()
@@ -1117,6 +1139,9 @@ Item {
         onTriggered: {
             if (hostsProcess.running || hostsSftpProcess.running) {
                 root._hostsTimedOut = true
+                // The killed pair's late exits must land nowhere: the run they belong to is over,
+                // and this arm has already emitted the answer the forced-done flags carry.
+                root._hostsLiveRun += 1
                 hostsProcess.running = false
                 hostsSftpProcess.running = false
                 root._hostsSmbDone = true
